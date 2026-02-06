@@ -1,126 +1,120 @@
 """
-live_state.py — Unified Evidence + Metacognitive Lens Injector (v4)
+live_state.py — Evidence Gatherer + Metacognitive Lens Injector (Template)
 
-Gathers system evidence, runs metacognition compile, injects into BOOT.md.
-One script. Runs from the unified cron.
+This is the AGENT-SPECIFIC glue script. It gathers evidence from YOUR
+environment and feeds it into the metacognition engine.
+
+The metacognition.py core is environment-agnostic.
+This file is where you wire in YOUR world.
+
+CUSTOMIZE THIS FILE for your agent's needs:
+- Replace the example evidence functions with your own data sources
+- Set WORKSPACE to your agent's working directory
+- Add whatever signals matter to your agent (git status, emails, APIs, etc.)
+
+Runs via cron (recommended: every 15 minutes).
 """
 
-import json, os, datetime, hashlib, subprocess, sys
+import json, os, datetime, subprocess, sys
 
-WORKSPACE = r"C:\Users\TESTING PC 8\clawd"
-SCANNER = os.path.join(WORKSPACE, "kalshi_scanner.py")
-BACKUP = os.path.join(WORKSPACE, "kalshi_scanner_turbo.py")
-TRADES_LOG = os.path.join(WORKSPACE, "real_trades.jsonl")
+# === CONFIGURE THESE ===
+# Option 1: Set CLAWD_WORKSPACE environment variable
+# Option 2: Change this path to your agent's workspace
+WORKSPACE = os.environ.get('CLAWD_WORKSPACE', os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 sys.path.insert(0, os.path.join(WORKSPACE, 'scripts'))
 
 
-def get_scanner_constants():
-    constants = {}
-    try:
-        with open(SCANNER, 'r', encoding='utf-8', errors='replace') as f:
-            for line in f:
-                s = line.strip()
-                if '=' in s and not s.startswith('#') and not s.startswith('def '):
-                    parts = s.split('=', 1)
-                    name = parts[0].strip()
-                    if any(name.startswith(p) for p in [
-                        'EXTRACTOR', 'BTC_', 'MIN_CASH', 'BET_SIZE',
-                    ]) or 'cap_pct' in name or name in ['WINNING_HOURS', 'LEARNING_HOURS']:
-                        constants[name] = parts[1].split('#')[0].strip()
-    except: pass
-    return constants
+# ============================================================
+# EXAMPLE: Evidence gathering functions
+# Replace these with whatever YOUR agent cares about.
+# ============================================================
+
+def get_system_status():
+    """Example: Check if key processes are running."""
+    # Replace with your own process checks
+    # e.g., check if a trading bot, web server, or scraper is alive
+    return "running"
 
 
-def get_file_hash(path):
-    if os.path.exists(path):
-        with open(path, 'rb') as f:
-            return hashlib.sha256(f.read()).hexdigest()[:12]
-    return "MISSING"
-
-
-def get_prawn_status():
-    try:
-        result = subprocess.run(
-            ['wmic', 'process', 'where',
-             "commandline like '%kalshi_scanner%' and name='python3.12.exe'",
-             'get', 'processid', '/format:csv'],
-            capture_output=True, text=True, timeout=10)
-        lines = [l.strip() for l in result.stdout.strip().split('\n') 
-                 if l.strip() and 'ProcessId' not in l and 'Node' not in l]
-        pids = [l.split(',')[-1] for l in lines if ',' in l]
-        return f"Running (PID {', '.join(pids)})" if pids else "⚠️ DEAD"
-    except: return "check failed"
-
-
-def get_balance():
-    try:
-        result = subprocess.run(
-            ['python', '-c',
-             'from kalshi_api import KalshiAPI; api=KalshiAPI(); b=api.get_balance(); '
-             'print(f"${b[\'balance\']/100:.2f} cash | ${b[\'portfolio_value\']/100:.2f} pos | '
-             '${(b[\'balance\']+b[\'portfolio_value\'])/100:.2f} total")'],
-            capture_output=True, text=True, timeout=15, cwd=WORKSPACE)
-        return result.stdout.strip() or "failed"
-    except: return "API unreachable"
-
-
-def get_recent_trades(n=3):
-    trades = []
-    if os.path.exists(TRADES_LOG):
-        with open(TRADES_LOG, 'r', encoding='utf-8', errors='replace') as f:
-            for line in f:
-                if line.strip():
-                    try: trades.append(json.loads(line.strip()))
-                    except: pass
-    return trades[-n:]
+def get_recent_activity(n=3):
+    """Example: Pull recent activity from a log file."""
+    # Replace with: git log, trade history, email check, calendar, etc.
+    activity_log = os.path.join(WORKSPACE, "activity.log")
+    if os.path.exists(activity_log):
+        with open(activity_log, 'r', encoding='utf-8', errors='replace') as f:
+            lines = [l.strip() for l in f if l.strip()]
+        return lines[-n:]
+    return []
 
 
 def compile_system_evidence():
+    """
+    Build the evidence string that gets injected into BOOT.md.
+    
+    This should be a SHORT summary of your agent's current state.
+    Keep it under ~500 tokens — it's injected into every context load.
+    """
     now = datetime.datetime.now()
     lines = []
     lines.append(f"*Evidence: {now.strftime('%H:%M')} EST*")
     lines.append("")
-    lines.append(f"**💰** {get_balance()}")
-    prawn = get_prawn_status()
-    lines.append(f"**🦐** {'⚠️ **NOT RUNNING**' if 'DEAD' in prawn else prawn}")
     
-    constants = get_scanner_constants()
-    cap = next((v for k, v in constants.items() if 'cap_pct' in k), '?')
-    lines.append(f"**Config:** odds={constants.get('EXTRACTOR_MIN_ODDS','?')} | "
-                 f"assets={constants.get('EXTRACTOR_ASSETS','?')} | cap={cap}")
-    lines.append(f"**Hours:** WIN={constants.get('WINNING_HOURS','?')} LEARN={constants.get('LEARNING_HOURS','?')}")
+    # === ADD YOUR EVIDENCE HERE ===
+    # Examples:
+    # lines.append(f"**Status:** {get_system_status()}")
+    # lines.append(f"**Balance:** {get_balance()}")
+    # lines.append(f"**Git:** {get_git_status()}")
+    # lines.append(f"**Inbox:** {count_unread_emails()} unread")
     
-    trades = get_recent_trades(3)
-    if trades:
-        parts = [f"{t.get('time','?')[11:16]} {t.get('coin','?')} {t.get('direction','?')} x{t.get('contracts','?')}" 
-                 for t in trades]
-        lines.append(f"**Trades:** {' → '.join(parts)}")
+    lines.append(f"**System:** {get_system_status()}")
+    
+    activity = get_recent_activity(3)
+    if activity:
+        lines.append(f"**Recent:** {' | '.join(activity)}")
+    
     lines.append("")
     return "\n".join(lines)
 
 
-def run_snapshot():
-    try:
-        result = subprocess.run(['python', 'scripts/snapshot_prawn.py'],
-            capture_output=True, text=True, timeout=15, cwd=WORKSPACE)
-        return result.stdout.strip()
-    except: return ""
+# ============================================================
+# OPTIONAL: Code change watchdog
+# If you have a critical script, you can hash-check it here.
+# ============================================================
 
+def run_snapshot():
+    """Optional: Run a code-change watchdog script."""
+    snapshot_script = os.path.join(WORKSPACE, 'scripts', 'snapshot_prawn.py')
+    if os.path.exists(snapshot_script):
+        try:
+            result = subprocess.run(
+                ['python', snapshot_script],
+                capture_output=True, text=True, timeout=15, cwd=WORKSPACE)
+            return result.stdout.strip()
+        except:
+            return ""
+    return ""
+
+
+# ============================================================
+# MAIN: Gather evidence → Compile lens → Inject into BOOT.md
+# ============================================================
 
 if __name__ == '__main__':
-    # 1. Snapshot
+    # 1. Optional snapshot/watchdog
     snap = run_snapshot()
     if snap and "CHANGE" in snap.upper():
         print(f"⚠️ {snap}")
     
-    # 2. System evidence
+    # 2. Gather system evidence
     evidence = compile_system_evidence()
     
-    # 3. Compile lens + inject via metacognition engine
+    # 3. Compile metacognitive lens + inject into BOOT.md
     from metacognition import inject_into_boot
     if inject_into_boot(system_evidence=evidence):
-        size = os.path.getsize(os.path.join(WORKSPACE, 'BOOT.md'))
-        print(f"BOOT.md updated ({size} bytes, ~{size//4} tokens)")
+        boot_path = os.path.join(WORKSPACE, 'BOOT.md')
+        if os.path.exists(boot_path):
+            size = os.path.getsize(boot_path)
+            print(f"BOOT.md updated ({size} bytes, ~{size//4} tokens)")
     else:
         print("Failed to update BOOT.md")

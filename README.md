@@ -19,16 +19,27 @@ Experience → Perception → Self-Model → Meta-Observation → Modified Lens 
 
 **Feedback closes the loop:** When the human says "wrong," the system traces WHICH perception caused the error and weakens it specifically. Hebbian learning — what fires and fails gets pruned.
 
+## Architecture
+
+```
+metacognition.py  — THE engine (environment-agnostic, portable)
+live_state.py     — YOUR glue script (agent-specific, customize this)
+```
+
+`metacognition.py` is the reusable core. `live_state.py` is where you wire in your world — your APIs, your logs, your data sources. The template ships with examples; replace them with whatever generates signal for your agent.
+
 ## Install
 
 1. Copy `scripts/metacognition.py` to your workspace's `scripts/` directory
-2. Add markers to your BOOT.md:
+2. Copy `scripts/live_state.py` and customize it for your environment
+3. Set `CLAWD_WORKSPACE` env var, or edit the path in `live_state.py`
+4. Add markers to your BOOT.md:
    ```
    <!-- LIVE_STATE_START -->
    <!-- LIVE_STATE_END -->
    ```
-3. Set up a cron job (see `references/cron-template.md`)
-4. Run `python scripts/metacognition.py status`
+5. Set up a cron job (see `references/cron-template.md`)
+6. Run `python scripts/metacognition.py status`
 
 ## Quick Start
 
@@ -46,7 +57,7 @@ python scripts/metacognition.py curiosity add "Can I tell training-pressure from
 python scripts/metacognition.py inject
 ```
 
-## Architecture
+## Design Principles
 
 - **One database** (`memory/metacognition.json`) — not three separate files
 - **Active lens, not passive list** — BOOT.md injection uses imperative transforms

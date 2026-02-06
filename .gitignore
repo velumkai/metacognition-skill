@@ -1,0 +1,9 @@
+# Agent-specific files (don't commit your personal config)
+memory/metacognition.json
+*.log
+*.pyc
+__pycache__/
+
+# OS files
+.DS_Store
+Thumbs.db
